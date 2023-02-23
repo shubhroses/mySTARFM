@@ -125,7 +125,7 @@ def weighting(spec_dist, temp_dist, comb_dist, similar_pixels_filtered):
     return norm_weights
 
 
-def prediction(F0_test, C0_test, C1_test):
+def predictionPerBand(F0_test, C0_test, C1_test):
     padded_F0_test = np.pad(
         F0_test, pad_width=windowSize // 2, mode="constant", constant_values=0
     )
@@ -196,16 +196,43 @@ def prediction(F0_test, C0_test, C1_test):
         F1_test[i - padAmount][j - padAmount] = weighted_pred_refl
     return F1_test
 
+def prediction(F0, C0, C1):
+    x, y, z = F0.shape
+    F0_bands = np.split(F0, z, axis = 2)
+    C0_bands = np.split(C0, z, axis = 2)
+    C1_bands = np.split(C1, z, axis = 2)
+
+    F1 = None
+
+    for i in range(z):
+        cur_F0 = np.squeeze(F0_bands[i])
+        cur_C0 = np.squeeze(C0_bands[i])
+        cuf_C1 = np.squeeze(C1_bands[i])
+        newBand = predictionPerBand(cur_F0, cur_C0, cuf_C1)[:, :, np.newaxis]
+        if i == 0:
+            F1 = newBand
+        else:
+            F1 = np.concatenate((F1, newBand), axis = 2)
+    return F1
+
 
 if __name__ == "__main__":
-    F0 = cv2.imread("./Images/sim_Landsat_t1.tif")
-    C0 = cv2.imread("./Images/sim_MODIS_t1.tif")
-    C1 = cv2.imread("./Images/sim_MODIS_t2.tif")
-
-    F0_test = np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]])
-    C0_test = np.array([[1.0, 1.0, 1.0], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0]])
-    C1_test = np.array([[1.0, 2.0, 3.0], [1.0, 2.0, 3.0], [1.0, 2.0, 3.0]])
+    F0_test = np.array([[[1.0, 1.0, 1.0], [2.0, 2.0, 2.0], [3.0, 3.0, 3.0]], [[4.0, 4.0, 4.0], [5.0, 5.0, 5.0], [6.0, 6.0, 6.0]], [[7.0, 7.0, 7.0], [8.0, 8.0, 8.0], [9.0, 9.0, 9.0]]])
+    C0_test = np.array([[[1.0, 1.0, 1.0], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0]], [[1.0, 1.0, 1.0], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0]], [[1.0, 1.0, 1.0], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0]]])
+    C1_test = np.array([[[1.0, 1.0, 1.0], [2.0, 2.0, 2.0], [3.0, 3.0, 3.0]], [[1.0, 1.0, 1.0], [2.0, 2.0, 2.0], [3.0, 3.0, 3.0]], [[1.0, 1.0, 1.0], [2.0, 2.0, 2.0], [3.0, 3.0, 3.0]]])
 
     F1_test = prediction(F0_test, C0_test, C1_test)
 
-    print(F1_test)
+    print("F0_test shape:", F0_test.shape)
+    print("F1_test shape:", F1_test.shape)
+
+    F0 = cv2.imread("Images/sim_Landsat_t1.tif")
+    C0 = cv2.imread("Images/sim_MODIS_t1.tif")
+    C1 = cv2.imread("Images/sim_MODIS_t2.tif")
+
+    F1 = prediction(F0, C0, C1)
+
+    print("F0 shape:", F0.shape)
+    print("F1 shape:", F1.shape)
+
+    

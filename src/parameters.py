@@ -3,7 +3,7 @@ import numpy as np
 
 # Set the size of the moving window in which the search for similar pixels 
 # is performed
-windowSize = 3
+windowSize = 31
 
 # Set the path where the results should be stored
 path = 'STARFM_demo/'
