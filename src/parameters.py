@@ -1,7 +1,6 @@
 import numpy as np
 
 
-
 # Set the size of the moving window in which the search for similar pixels 
 # is performed
 windowSize = 3
@@ -22,7 +21,7 @@ temp = False
 spatImp = 150 
 
 # increasing the number of classes limits the number of similar pixels
-numberClass = 4 
+numberClass = 4
 
 # Set the uncertainty value for the fine resolution sensor
 # https://earth.esa.int/web/sentinel/technical-guides/sentinel-2-msi/performance 
@@ -33,7 +32,7 @@ uncertaintyFineRes = 0.03
 uncertaintyCoarseRes = 0.03
 
 # Other global variables
-mid_idx = (windowSize)//2
+mid_idx = (windowSize**2)//2
 specUncertainty = np.sqrt(uncertaintyFineRes**2 + uncertaintyCoarseRes**2)
 tempUncertainty = np.sqrt(2*uncertaintyCoarseRes**2)
 
@@ -41,3 +40,6 @@ tempUncertainty = np.sqrt(2*uncertaintyCoarseRes**2)
 # This number should be multiple of the image height and not bigger than it
 # Use bigger size for small images
 sizeSlices = 150
+
+# The depth of zeros to pad around each numpy array
+padAmount = windowSize//2
