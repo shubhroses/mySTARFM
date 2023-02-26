@@ -1,5 +1,6 @@
 import cv2
 import rasterio
+from rasterio.transform import from_origin
 import numpy as np
 import sys
 
@@ -216,34 +217,46 @@ def prediction(F0, C0, C1):
             F1 = np.concatenate((F1, newBand), axis=2)
     return F1
 
+def saveImage(F1):
+    output_file = "results/output.tif"
+    xmin, ymax = 0, 0
+    xres, yres = 1, 1
+    nrows, ncols, nbands = F1.shape
+    transform = from_origin(xmin, ymax, xres, yres)
+
+    with rasterio.open(output_file, 'w', driver='GTiff', height=nrows, width=ncols, count=nbands, dtype=F1.dtype, transform=transform) as dst:
+        # Write the NumPy array to the file
+        for i in range(nbands):
+            dst.write(F1[:,:,i], indexes=i+1)
+
 
 if __name__ == "__main__":
-    F0_test = np.array(
-        [
-            [[1.0, 1.0, 1.0], [2.0, 2.0, 2.0], [3.0, 3.0, 3.0]],
-            [[4.0, 4.0, 4.0], [5.0, 5.0, 5.0], [6.0, 6.0, 6.0]],
-            [[7.0, 7.0, 7.0], [8.0, 8.0, 8.0], [9.0, 9.0, 9.0]],
-        ]
-    )
-    C0_test = np.array(
-        [
-            [[1.0, 1.0, 1.0], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0]],
-            [[1.0, 1.0, 1.0], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0]],
-            [[1.0, 1.0, 1.0], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0]],
-        ]
-    )
-    C1_test = np.array(
-        [
-            [[1.0, 1.0, 1.0], [2.0, 2.0, 2.0], [3.0, 3.0, 3.0]],
-            [[1.0, 1.0, 1.0], [2.0, 2.0, 2.0], [3.0, 3.0, 3.0]],
-            [[1.0, 1.0, 1.0], [2.0, 2.0, 2.0], [3.0, 3.0, 3.0]],
-        ]
-    )
+    # F0_test = np.array(
+    #     [
+    #         [[1.0, 1.0, 1.0], [2.0, 2.0, 2.0], [3.0, 3.0, 3.0]],
+    #         [[4.0, 4.0, 4.0], [5.0, 5.0, 5.0], [6.0, 6.0, 6.0]],
+    #         [[7.0, 7.0, 7.0], [8.0, 8.0, 8.0], [9.0, 9.0, 9.0]],
+    #     ]
+    # )
+    # C0_test = np.array(
+    #     [
+    #         [[1.0, 1.0, 1.0], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0]],
+    #         [[1.0, 1.0, 1.0], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0]],
+    #         [[1.0, 1.0, 1.0], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0]],
+    #     ]
+    # )
+    # C1_test = np.array(
+    #     [
+    #         [[1.0, 1.0, 1.0], [2.0, 2.0, 2.0], [3.0, 3.0, 3.0]],
+    #         [[1.0, 1.0, 1.0], [2.0, 2.0, 2.0], [3.0, 3.0, 3.0]],
+    #         [[1.0, 1.0, 1.0], [2.0, 2.0, 2.0], [3.0, 3.0, 3.0]],
+    #     ]
+    # )
 
-    F1_test = prediction(F0_test, C0_test, C1_test)
+    # F1_test = prediction(F0_test, C0_test, C1_test)
 
-    print("F0_test shape:", F0_test.shape)
-    print("F1_test shape:", F1_test.shape)
+    # print("F0_test shape:", F0_test.shape)
+    # print("F1_test shape:", F1_test.shape)
 
     F0 = cv2.imread("Images/sim_Landsat_t1.tif")
     C0 = cv2.imread("Images/sim_MODIS_t1.tif")
@@ -253,3 +266,5 @@ if __name__ == "__main__":
 
     print("F0 shape:", F0.shape)
     print("F1 shape:", F1.shape)
+
+    saveImage(F1)
