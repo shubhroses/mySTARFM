@@ -3,6 +3,8 @@ import rasterio
 from rasterio.transform import from_origin
 import numpy as np
 import sys
+import matplotlib.pyplot as plt
+from scipy.signal import convolve2d
 
 from parameters import (
     windowSize,
@@ -125,27 +127,27 @@ def weighting(spec_dist, temp_dist, comb_dist, similar_pixels_filtered):
 
     return norm_weights
 
-
-def predictionPerBand(F0_test, C0_test, C1_test):
-    padded_F0_test = np.pad(
-        F0_test, pad_width=windowSize // 2, mode="constant", constant_values=0
-    )
-    padded_C0_test = np.pad(
-        C0_test, pad_width=windowSize // 2, mode="constant", constant_values=0
-    )
-    padded_C1_test = np.pad(
-        C1_test, pad_width=windowSize // 2, mode="constant", constant_values=0
-    )
-
-    F1_test = C1_test.copy()
-
+def getImportantPixels(padded_F0_test, padded_C0_test, padded_C1_test, edge_image):
     F0_important_pixels = {}
     for i in range(padAmount, len(padded_F0_test) - padAmount):
         for j in range(padAmount, len(padded_F0_test[0]) - padAmount):
-            F0_important_pixels[(i, j)] = padded_F0_test[
-                i - windowSize // 2 : i + windowSize // 2 + 1,
-                j - windowSize // 2 : j + windowSize // 2 + 1,
-            ].flatten()
+            if edge_image[i-padAmount][j-padAmount] != 0:
+                F0_important_pixels[(i, j)] = padded_F0_test[
+                    i - windowSize // 2 : i + windowSize // 2 + 1,
+                    j - windowSize // 2 : j + windowSize // 2 + 1,
+                ].flatten()
+    return F0_important_pixels
+
+def padImage(image):
+    padded_image = np.pad(
+        image, pad_width=windowSize // 2, mode="constant", constant_values=0
+    )
+    return padded_image
+
+def predictionPerBand(padded_F0_test, padded_C0_test, padded_C1_test, C1_test, edge_image):
+    F1_test = C1_test.copy()
+
+    F0_important_pixels = getImportantPixels(padded_F0_test, padded_C0_test, padded_C1_test, edge_image)
 
     for i, j in F0_important_pixels.keys():
         F0_window = F0_important_pixels[(i, j)]
@@ -197,6 +199,23 @@ def predictionPerBand(F0_test, C0_test, C1_test):
         F1_test[i - padAmount][j - padAmount] = weighted_pred_refl
     return F1_test
 
+def sobel_edge_detection(img):
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    sobelx = cv2.Sobel(img, cv2.CV_64F, 1, 0, ksize=3)
+    sobely = cv2.Sobel(img, cv2.CV_64F, 0, 1, ksize=3)
+    mag = np.sqrt(sobelx**2 + sobely**2)
+    mag = cv2.normalize(mag, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+    thresh = cv2.threshold(mag, 0, 255, cv2.THRESH_BINARY+cv2.THRESH_OTSU)[1]
+        # define a 5x5 kernel of ones
+    kernel = np.ones((15, 15))
+
+    # perform the convolution operation with the kernel
+    output = convolve2d(thresh, kernel, mode='same')
+
+    # threshold the output to set any non-zero values to 1
+    output[output > 0] = 1
+    return output
+
 
 def prediction(F0, C0, C1):
     x, y, z = F0.shape
@@ -204,13 +223,23 @@ def prediction(F0, C0, C1):
     C0_bands = np.split(C0, z, axis=2)
     C1_bands = np.split(C1, z, axis=2)
 
+    edge_image = sobel_edge_detection(F0)
+    # edge_image = np.ones((150, 150))
+    # plt.imshow(edge_image, cmap='gray')
+    # plt.show()
+
     F1 = None
 
     for i in range(z):
         cur_F0 = np.squeeze(F0_bands[i])
         cur_C0 = np.squeeze(C0_bands[i])
-        cuf_C1 = np.squeeze(C1_bands[i])
-        newBand = predictionPerBand(cur_F0, cur_C0, cuf_C1)[:, :, np.newaxis]
+        cur_C1 = np.squeeze(C1_bands[i])
+
+        padded_cur_F0 = padImage(cur_F0)
+        padded_cur_C0 = padImage(cur_C0)
+        padded_cur_C1 = padImage(cur_C1)
+
+        newBand = predictionPerBand(padded_cur_F0, padded_cur_C0, padded_cur_C1, cur_C1, edge_image)[:, :, np.newaxis]
         if i == 0:
             F1 = newBand
         else:
@@ -267,4 +296,7 @@ if __name__ == "__main__":
     print("F0 shape:", F0.shape)
     print("F1 shape:", F1.shape)
 
-    saveImage(F1)
+    plt.imshow(F1, cmap='gray')
+    plt.show()
+
+    # saveImage(F1)
