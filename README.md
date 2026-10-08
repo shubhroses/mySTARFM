@@ -63,14 +63,17 @@ The notebooks are development notes rather than polished reports. Two of them co
 
 ## Running it
 
-The project uses [Poetry](https://python-poetry.org/). `pyproject.toml` asks for Python 3.10 or newer; the notebooks were run on Python 3.10.8.
+The project uses [Poetry](https://python-poetry.org/). `pyproject.toml` asks for Python 3.10 or newer, but the lock file was last updated in March 2023 and should be installed with Python 3.10, the version the notebooks were run on (3.10.8).
 
 ```bash
 git clone https://github.com/shubhroses/mySTARFM.git
 cd mySTARFM
+poetry env use python3.10
 poetry install --no-root
 poetry run python src/starfm.py
 ```
+
+`poetry env use python3.10` makes Poetry build the environment with the `python3.10` on your `PATH`. Without it Poetry picks an interpreter itself, which can be a newer one. Tried on Python 3.13, the install stopped with build errors for the locked numpy 1.24.2, pillow 9.4.0 and pyzmq 25.0.0, which have no wheels for that version. Python 3.11 and 3.12 were not tried.
 
 `--no-root` installs the dependencies only. The code is run from `src/` and is not set up as an installable package: without the flag, Poetry 2 installs the dependencies and then exits with an error because it finds no `mystarfm` package.
 
@@ -82,9 +85,9 @@ Without Poetry, `src/starfm.py` needs `numpy`, `scipy`, `opencv-python`, `raster
 
 ### Notebooks
 
-Open the notebooks with `src/` as the working directory. They `import starfm` directly and read the sample images from `../Images/`. The Poetry environment includes `ipykernel` but no notebook server, so use an editor that can run that environment as a kernel (the notebooks were written in VS Code) or add JupyterLab yourself.
+Open the notebooks with `src/` as the working directory: three of them `import starfm` directly, and all except `dividePixels.ipynb` read the sample images from `../Images/`. The Poetry environment includes `ipykernel` but no notebook server, so use an editor that can run that environment as a kernel (the notebooks were written in VS Code) or add JupyterLab yourself.
 
-In October 2026 the code cells of all five notebooks were executed in order in the locked environment. Every stored printed or returned value was reproduced, including the four metrics in `compareImages.ipynb`, and so were the two errors described above. The stored figures were not compared.
+In October 2026 the code cells of all five notebooks were executed in order in the locked environment. Every stored printed or returned value was reproduced, including the four metrics in `compareImages.ipynb`, and so were the two errors described above. The stored figures were not compared, and one of them is no longer drawn: the figure stored under the third cell of `edgeDetection.ipynb` is the edge mask, plotted by two lines in `prediction` that are now commented out.
 
 ### Calling it from Python
 
@@ -107,7 +110,7 @@ F1 = prediction(F0, C0, C1)                      # shape (150, 150, 3), dtype ui
 - **Arithmetic is unsigned.** The arrays stay `uint8` through the distance calculations, so a difference that should be negative wraps around to a large positive number. On the sample data this happens to the spectral difference at 2,033 of the 22,500 pixels, where it makes a small difference look like a very large one, and no neighbour darker than the centre pixel is ever counted as similar. The same wraparound inflates the MAE recorded in `compareImages.ipynb`: recomputed with signed arithmetic it is 0.41, not 1.21. Because the output array is a copy of `C1`, predictions are truncated to integers whenever the inputs are integer arrays.
 - **The metrics assume an 8-bit scale.** PSNR and SSIM in `compareImages.ipynb` use a 0 to 255 range, far wider than data that tops out at 15, so both come out more flattering than they would on the data's own range. Recomputed with a range of 15, the same arrays give a PSNR of 21.6 dB and an SSIM of 0.876.
 - **One window at a time.** The prediction is a Python loop over pixels with no chunking or parallelism. For the 150 x 150 samples that takes about 2 seconds with the mask and about 5 seconds without it on an Apple silicon Mac; it will be slow for real scenes. starfm4py partitions the image with dask, stores the windows as zarr files and processes them in slices. That part was not carried over.
-- **One input pair, limited input types.** Only one fine/coarse pair is supported. The edge mask calls OpenCV's BGR-to-gray conversion on `F0`, so a single-band array is rejected, and so are `int16` and `float64` arrays. Three-channel `uint8`, `uint16` and `float32` arrays work.
+- **One input pair, limited input types.** Only one fine/coarse pair is supported. The edge mask calls OpenCV's BGR-to-gray conversion on `F0`, which takes three or four bands only, so arrays with one, two, five or more bands are rejected, and so are `int16` and `float64` arrays. Three-channel `uint8`, `uint16` and `float32` arrays work.
 - **No tests.** There is no test suite. The notebooks are the only record of checks.
 
 ## Origin and credits
