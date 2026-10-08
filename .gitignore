@@ -1,0 +1,22 @@
+# macOS Finder metadata
+.DS_Store
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+
+# Virtual environments
+.venv/
+venv/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Packaging output
+dist/
+build/
+*.egg-info/
+
+# Editor settings
+.vscode/
+.idea/
