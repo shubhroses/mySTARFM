@@ -1,0 +1,4 @@
+# What the tests need on top of the runtime dependencies.
+# pytest 7.0 is the first release with the "pythonpath" setting that
+# pyproject.toml uses to put src/ on the import path.
+pytest>=7.0

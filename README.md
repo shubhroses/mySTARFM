@@ -57,7 +57,9 @@ All of this is measured on 8-bit values that only span 0 to 15, and the recorded
 | `src/dividePixels.ipynb` | Side experiment: a ring drawn in a 30 x 30 array and upsampled to 100 x 100 with nearest-neighbour interpolation |
 | `Images/` | Simulated 150 x 150 fine ("Landsat") and coarse ("MODIS") rasters from the starfm4py test data, for dates t1, t2 and t4. The code uses t1 and t2. The t4 pair belongs to a different upstream test case and is not used |
 | `results/output.tif` | The t2 prediction from the all-pixels version of the code, committed on 26 February 2023, before the edge mask was added. Running the current code with the mask replaced by ones reproduces it exactly. `compareImages.ipynb` loads it as `F1_control` |
-| `pyproject.toml`, `poetry.lock` | Poetry project file and the lock file for the environment the notebooks were run in |
+| `tests/test_starfm.py` | pytest tests for the window functions and the edge mask, on small arrays with results worked out by hand |
+| `requirements-dev.txt` | The one package the tests need on top of the runtime dependencies: pytest |
+| `pyproject.toml`, `poetry.lock` | Poetry project file, which also holds the pytest settings, and the lock file for the environment the notebooks were run in |
 | `LICENSE` | The GNU General Public License, version 3, unchanged from <https://www.gnu.org/licenses/gpl-3.0.txt> |
 
 The notebooks are development notes rather than polished reports. Two of them contain a cell that stops with an error. The last cell of `convertArrayToImage.ipynb` prints the shape of what `cv2.imread` returned for `results/prediction.tif`, and that is `None`: the file holds 64-bit floats, which OpenCV cannot read, and it is absent from a fresh clone. The third cell of `dividePixels.ipynb` is an abandoned attempt to draw a diagonal line.
@@ -105,14 +107,31 @@ C1 = cv2.imread("../Images/sim_MODIS_t2.tif")    # coarse image, prediction date
 F1 = prediction(F0, C0, C1)                      # shape (150, 150, 3), dtype uint8
 ```
 
+### Tests
+
+`tests/test_starfm.py` checks the distance, similarity, filtering and weighting functions and the edge mask on arrays small enough to work out by hand, and the comments in the file show the working. It also runs the 3 x 3 worked example from `src/spectralDistance.ipynb` through `predictionPerBand` and `prediction`. For those tests the moving window is shrunk to 3 x 3 by replacing `windowSize`, `mid_idx` and `padAmount` in the `starfm` module while the test runs. One test is marked as an expected failure: it asks for a signed difference from `uint8` input, which is the wraparound described under [Known limitations](#known-limitations).
+
+The tests need pytest. It is listed in `requirements-dev.txt` and kept out of `pyproject.toml`, so the lock file does not have to be regenerated. From the repository root:
+
+```bash
+poetry run pip install -r requirements-dev.txt
+poetry run pytest
+```
+
+The result is 23 passed and 1 xfailed, in about 2 seconds. This was checked in October 2026 in the locked environment with pytest 9.1.1, and on Python 3.13 with the current releases named above. `pyproject.toml` tells pytest to collect from `tests/` and to put `src/` on the import path. The second setting needs pytest 7.0 or newer. Run pytest from the repository root: started in `src/`, it looks for tests there and finds none.
+
+In the Poetry environment the `pip install` adds pytest, pluggy, iniconfig and exceptiongroup. It also upgrades one locked package, typing-extensions, from 4.5.0, because exceptiongroup asks for 4.6 or newer. `poetry install --no-root` puts 4.5.0 back, and the tests pass with either version. `poetry sync --no-root` removes pytest again and returns the environment to the lock file.
+
+Without Poetry, `pip install -r requirements-dev.txt` and `pytest` do the same in any environment that has the packages listed above. Nothing runs the tests automatically: the repository has no CI workflow.
+
 ## Known limitations
 
 - **Images are loaded at 8-bit precision, and not completely.** The sample rasters are single-band, signed 16-bit TIFFs with values from 500 to 4000. `cv2.imread` with its default flags returns them as 8-bit, three-channel arrays. The three channels are identical, so the fusion runs three times over the same data, and every value is divided by 256 and rounded down, which leaves integers no larger than 15. That is why the plotted arrays look almost black. The same default read also returns zeros for 143 of the 150 pixels in each of the six right-most columns (seen with OpenCV 4.7.0 and 5.0.0 on macOS). This shows up as a dark strip in the notebook figures, a false vertical edge that puts the 14 right-most columns into the mask, and a strip of zeros in `results/output.tif`. Reading with rasterio, which is already a dependency, or with `cv2.IMREAD_UNCHANGED` returns the full 16-bit band with every column intact. That is a 2-D `int16` array, which `prediction` does not accept as it is; stacked into three channels and cast to `float32`, the bands run through the code unchanged.
-- **Arithmetic is unsigned.** The arrays stay `uint8` through the distance calculations, so a difference that should be negative wraps around to a large positive number. On the sample data this happens to the spectral difference at 2,033 of the 22,500 pixels, where it makes a small difference look like a very large one, and no neighbour darker than the centre pixel is ever counted as similar. The same wraparound inflates the MAE recorded in `compareImages.ipynb`: recomputed with signed arithmetic it is 0.41, not 1.21. Because the output array is a copy of `C1`, predictions are truncated to integers whenever the inputs are integer arrays.
+- **Arithmetic is unsigned.** The arrays stay `uint8` through the distance calculations, so a difference that should be negative wraps around to a large positive number. On the sample data this happens to the spectral difference at 2,033 of the 22,500 pixels, where it makes a small difference look like a very large one, and no neighbour darker than the centre pixel is ever counted as similar. The same wraparound inflates the MAE recorded in `compareImages.ipynb`: recomputed with signed arithmetic it is 0.41, not 1.21. Because the output array is a copy of `C1`, predictions are truncated to integers whenever the inputs are integer arrays. `tests/test_starfm.py` holds an expected-failure test for the wraparound.
 - **The metrics assume an 8-bit scale.** PSNR and SSIM in `compareImages.ipynb` use a 0 to 255 range, far wider than data that tops out at 15, so both come out more flattering than they would on the data's own range. Recomputed with a range of 15, the same arrays give a PSNR of 21.6 dB and an SSIM of 0.876.
 - **One window at a time.** The prediction is a Python loop over pixels with no chunking or parallelism. For the 150 x 150 samples that takes about 2 seconds with the mask and about 5 seconds without it on an Apple silicon Mac; it will be slow for real scenes. starfm4py partitions the image with dask, stores the windows as zarr files and processes them in slices. That part was not carried over.
 - **One input pair, limited input types.** Only one fine/coarse pair is supported. The edge mask calls OpenCV's BGR-to-gray conversion on `F0`, which takes three or four bands only, so arrays with one, two, five or more bands are rejected, and so are `int16` and `float64` arrays. Three-channel `uint8`, `uint16` and `float32` arrays work.
-- **No tests.** There is no test suite. The notebooks are the only record of checks.
+- **Thin test coverage.** The tests cover the functions that work on one window, the edge mask and a 3 x 3 worked example. Nothing tests a prediction on the sample images, `saveImage`, the notebooks or the metrics in `compareImages.ipynb`, and the tests are not run automatically.
 
 ## Origin and credits
 

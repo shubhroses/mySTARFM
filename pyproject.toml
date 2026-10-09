@@ -15,6 +15,11 @@ scikit-image = "^0.19.3"
 matplotlib = "^3.7.0"
 
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
