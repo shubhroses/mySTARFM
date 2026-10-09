@@ -108,8 +108,8 @@ def test_edge_mask_on_the_sample_image():
     mask = starfm.sobel_edge_detection(read("sim_Landsat_t1.tif"))
 
     assert mask.sum() == 6124
-    # The disc keeps 25 pixels clear of every border, further than the mask
-    # reaches from its edge.
+    # The disc stays at least 24 pixels away from every border, further than
+    # the mask reaches from its edge.
     assert not mask[:, -14:].any()
 
 
@@ -144,11 +144,14 @@ def test_script_predicts_at_full_depth(monkeypatch, capsys):
     monkeypatch.chdir(REPOSITORY)
     monkeypatch.setattr(sys, "path", list(sys.path))
 
-    runpy.run_path(str(REPOSITORY / "src" / "starfm.py"), run_name="__main__")
+    script = runpy.run_path(str(REPOSITORY / "src" / "starfm.py"), run_name="__main__")
 
     printed = capsys.readouterr().out
     assert "F0 shape: (150, 150, 1)" in printed
     assert "F1 shape: (150, 150, 1)" in printed
+    # The script predicts from the right three files: its result has the
+    # error of the masked prediction.
+    assert rmse_against_true_t2(script["F1"]) == pytest.approx(153.9, abs=0.05)
     # The figure is scaled to the data, 500 to 4000, not to 8-bit values.
     assert len(shown) == 1
     assert shown[0].get_clim() == (500, 4000)

@@ -71,6 +71,7 @@ def test_spectral_distance():
 
 @pytest.mark.xfail(
     strict=True,
+    raises=AssertionError,
     reason="unsigned input wraps around, see Known limitations in the README",
 )
 def test_spectral_distance_of_unsigned_input_is_signed():
@@ -183,8 +184,9 @@ def test_filtering_drops_similar_pixels_that_fit_worse_than_the_centre(window3):
 
 
 def test_filtering_with_the_temporal_test_switched_on(window3, monkeypatch):
-    # As C1, but the pixel left of the centre changes by 2 instead of 0.
-    coarse_t1 = np.array([1.0, 2.0, 3.0, 3.0, 2.0, 3.0, 1.0, 2.0, 3.0])
+    # As C1, but the pixel left of the centre changes by 2 instead of 0, and
+    # the pixel right of it by 1 instead of 2.
+    coarse_t1 = np.array([1.0, 2.0, 3.0, 3.0, 2.0, 2.0, 1.0, 2.0, 3.0])
     spec_diff, spec_dist = starfm.spectral_distance(F0.ravel(), C0.ravel())
     temp_diff, temp_dist = starfm.temporal_distance(C0.ravel(), coarse_t1)
     arguments = (F0.ravel(), spec_dist, temp_dist, spec_diff, temp_diff)
@@ -194,7 +196,9 @@ def test_filtering_with_the_temporal_test_switched_on(window3, monkeypatch):
     with_temporal_test = starfm.filtering(*arguments)
 
     # The centre changes by 1 between the dates. With the switch on, a pixel
-    # also has to change by less than 1 plus the uncertainty of 0.042.
+    # also has to change by less than 1 plus the uncertainty of 0.042. That
+    # drops the pixel on the left. The pixel on the right passes it and is
+    # dropped by the spectral test alone, so the result needs both tests.
     np.testing.assert_array_equal(without_temporal_test, [0, 0, 0, 1, 1, 0, 0, 0, 0])
     np.testing.assert_array_equal(with_temporal_test, [0, 0, 0, 0, 1, 0, 0, 0, 0])
 
@@ -273,24 +277,30 @@ def test_prediction_per_band_on_the_worked_example(window3):
 
 
 def test_prediction_per_band_keeps_the_coarse_value_outside_the_mask(window3):
-    centre_only = np.zeros((3, 3))
-    centre_only[1, 1] = 1
+    # One pixel of the mask is set, and it is off the diagonal, so a mask read
+    # with rows and columns swapped would predict a different pixel.
+    right_of_centre = np.zeros((3, 3))
+    right_of_centre[1, 2] = 1
 
-    predicted = predict_band(centre_only)
+    predicted = predict_band(right_of_centre)
 
     np.testing.assert_array_equal(predict_band(np.zeros((3, 3))), C1)
     changed = predicted != C1
-    assert changed[1, 1]
+    assert changed[1, 2]
     assert changed.sum() == 1
 
 
 def test_prediction_treats_each_band_on_its_own(window3):
     # Band 0 is the worked example. In band 1 the coarse image does not change
-    # between the dates, so the prediction is F0. In band 2 the fine and coarse
-    # images agree on the base date, so the prediction is C1.
-    fine_t0 = np.dstack([F0, F0, C0]).astype(np.float32)
-    coarse_t0 = np.dstack([C0, C0, C0]).astype(np.float32)
-    coarse_t1 = np.dstack([C1, C0, C1]).astype(np.float32)
+    # between the dates, so the prediction is the fine image. In band 2 the
+    # fine and coarse images agree on the base date, so the prediction is the
+    # coarse image of the prediction date. No two bands of an input are the
+    # same, so a band taken from the wrong place changes the result.
+    twos = np.full((3, 3), 2.0)
+    threes = np.full((3, 3), 3.0)
+    fine_t0 = np.dstack([F0, 10 * F0, C1]).astype(np.float32)
+    coarse_t0 = np.dstack([C0, twos, C1]).astype(np.float32)
+    coarse_t1 = np.dstack([C1, twos, threes]).astype(np.float32)
     # The image is smaller than the 15 x 15 box that widens the edges, so one
     # edge pixel is enough to put all nine pixels in the mask.
     assert starfm.sobel_edge_detection(fine_t0).all()
@@ -301,8 +311,8 @@ def test_prediction_treats_each_band_on_its_own(window3):
     np.testing.assert_allclose(
         predicted[:, :, 0], predict_band(np.ones((3, 3))), rtol=1e-6
     )
-    np.testing.assert_array_equal(predicted[:, :, 1], F0)
-    np.testing.assert_array_equal(predicted[:, :, 2], C1)
+    np.testing.assert_array_equal(predicted[:, :, 1], 10 * F0)
+    np.testing.assert_array_equal(predicted[:, :, 2], threes)
 
 
 def test_prediction_of_a_single_band(window3):
