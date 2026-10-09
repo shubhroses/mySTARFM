@@ -2,7 +2,7 @@
 
 A small NumPy version of STARFM, the Spatial and Temporal Adaptive Reflectance Fusion Model for blending fine- and coarse-resolution satellite images. The distance, filtering and weighting functions are adapted from [starfm4py](https://github.com/nmileva/starfm4py) by Nikolina Mileva and rewritten to work on one moving window at a time, without dask. The repository adds one experiment on top: run the expensive moving-window prediction only on pixels near edges in the fine image, and let every other pixel take the coarse value.
 
-This is a prototype written in February and March 2023. It runs end to end on the simulated test images in `Images/`, which also come from starfm4py. Read [Known limitations](#known-limitations) before pointing it at real data, and [Origin and credits](#origin-and-credits) for what was taken from the upstream project.
+This is a prototype written in February and March 2023. It runs end to end on the simulated test images in `Images/`, which also come from starfm4py. Read [Known limitations](#known-limitations) before pointing it at real data, and [Origin and credits](#origin-and-credits) for what was taken from the upstream project. Because of that origin the repository is licensed under GPL-3.0; see [Licence](#licence).
 
 ## Background
 
@@ -58,6 +58,7 @@ All of this is measured on 8-bit values that only span 0 to 15, and the recorded
 | `Images/` | Simulated 150 x 150 fine ("Landsat") and coarse ("MODIS") rasters from the starfm4py test data, for dates t1, t2 and t4. The code uses t1 and t2. The t4 pair belongs to a different upstream test case and is not used |
 | `results/output.tif` | The t2 prediction from the all-pixels version of the code, committed on 26 February 2023, before the edge mask was added. Running the current code with the mask replaced by ones reproduces it exactly. `compareImages.ipynb` loads it as `F1_control` |
 | `pyproject.toml`, `poetry.lock` | Poetry project file and the lock file for the environment the notebooks were run in |
+| `LICENSE` | The GNU General Public License, version 3, unchanged from <https://www.gnu.org/licenses/gpl-3.0.txt> |
 
 The notebooks are development notes rather than polished reports. Two of them contain a cell that stops with an error. The last cell of `convertArrayToImage.ipynb` prints the shape of what `cv2.imread` returned for `results/prediction.tif`, and that is `None`: the file holds 64-bit floats, which OpenCV cannot read, and it is absent from a fresh clone. The third cell of `dividePixels.ipynb` is an abandoned attempt to draw a diagonal line.
 
@@ -122,3 +123,16 @@ F1 = prediction(F0, C0, C1)                      # shape (150, 150, 3), dtype ui
   - The six rasters in `Images/` are unmodified copies of files in upstream's `Tests/Test_1` (t1 and t2) and `Tests/Test_2` (t4).
 - Not taken from starfm4py: the loop that cuts each window out of zero-padded arrays, the handling of several bands, the Sobel and Otsu edge mask with its fall-back to the coarse value, `saveImage`, and the comparison metrics.
 - The paper behind starfm4py is N. Mileva, S. Mecklenburg and F. Gascon, "New tool for spatio-temporal image fusion in remote sensing: a case study approach using Sentinel-2 and Sentinel-3 data", Proc. SPIE 10789, Image and Signal Processing for Remote Sensing XXIV, 2018, [doi:10.1117/12.2327091](https://doi.org/10.1117/12.2327091). `src/spectralDistance.ipynb` links the copy hosted by the University of Augsburg: <https://opus.bibliothek.uni-augsburg.de/opus4/frontdoor/deliver/index/docId/78805/file/STARFM_paper.pdf>. The starfm4py README asks that published work using its code cite this paper.
+
+## Licence
+
+This repository is licensed under the GNU General Public License, version 3 (GPL-3.0). The full text is in [`LICENSE`](LICENSE).
+
+It has that licence because it adapts code from [starfm4py](https://github.com/nmileva/starfm4py) by Nikolina Mileva, which is published under GPL-3.0. That licence lets anyone change the code and pass it on, on the condition that the result is offered under the same terms. The files adapted or copied from starfm4py are:
+
+- `src/starfm.py`: the distance, similarity, filtering and weighting functions and the weighted sum that produces each pixel, adapted from upstream's `src/starfm4py.py`.
+- `src/parameters.py`: upstream's `src/parameters.py` with one constant added.
+- `src/spectralDistance.ipynb`: earlier copies of the same functions and parameters, and a GeoTIFF-writing cell that follows upstream's `Tests/test.py`.
+- `Images/`: six rasters copied unchanged from upstream's `Tests/Test_1` and `Tests/Test_2`.
+
+The adaptation was made in February and March 2023, and the git history records every change since. [Origin and credits](#origin-and-credits) describes the changes function by function and lists the parts that do not come from starfm4py. Those parts are released under the same licence, so GPL-3.0 covers the repository as a whole.
