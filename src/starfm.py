@@ -1,8 +1,10 @@
 import cv2
 import rasterio
+from rasterio.errors import NotGeoreferencedWarning
 from rasterio.transform import from_origin
 import numpy as np
 import sys
+import warnings
 import matplotlib.pyplot as plt
 from scipy.signal import convolve2d
 
@@ -200,7 +202,11 @@ def predictionPerBand(padded_F0_test, padded_C0_test, padded_C1_test, C1_test, e
     return F1_test
 
 def sobel_edge_detection(img):
-    img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    if img.ndim == 3 and img.shape[2] == 1:
+        # a single band is already a grayscale image
+        img = img[:, :, 0]
+    elif img.ndim == 3:
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     sobelx = cv2.Sobel(img, cv2.CV_64F, 1, 0, ksize=3)
     sobely = cv2.Sobel(img, cv2.CV_64F, 0, 1, ksize=3)
     mag = np.sqrt(sobelx**2 + sobely**2)
@@ -246,6 +252,23 @@ def prediction(F0, C0, C1):
             F1 = np.concatenate((F1, newBand), axis=2)
     return F1
 
+def readImage(path):
+    """Read a raster as a float32 array of shape (rows, cols, bands).
+
+    cv2.imread with its default flags turns every file into an 8-bit image
+    with three channels, which divides the 16-bit sample rasters by 256.
+    rasterio returns each band with the values that are stored in the file.
+    They are cast to float32, which holds every 16-bit integer exactly, so
+    that the differences taken in prediction() keep their sign and the
+    predicted values are not truncated to integers.
+    """
+    with warnings.catch_warnings():
+        # The sample rasters carry no georeferencing and none is needed here.
+        warnings.simplefilter("ignore", NotGeoreferencedWarning)
+        with rasterio.open(path) as dataset:
+            bands = dataset.read()
+    return np.moveaxis(bands, 0, -1).astype(np.float32)
+
 def saveImage(F1):
     output_file = "results/output.tif"
     xmin, ymax = 0, 0
@@ -287,9 +310,9 @@ if __name__ == "__main__":
     # print("F0_test shape:", F0_test.shape)
     # print("F1_test shape:", F1_test.shape)
 
-    F0 = cv2.imread("Images/sim_Landsat_t1.tif")
-    C0 = cv2.imread("Images/sim_MODIS_t1.tif")
-    C1 = cv2.imread("Images/sim_MODIS_t2.tif")
+    F0 = readImage("Images/sim_Landsat_t1.tif")
+    C0 = readImage("Images/sim_MODIS_t1.tif")
+    C1 = readImage("Images/sim_MODIS_t2.tif")
 
     F1 = prediction(F0, C0, C1)
 

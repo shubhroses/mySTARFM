@@ -305,6 +305,15 @@ def test_prediction_treats_each_band_on_its_own(window3):
     np.testing.assert_array_equal(predicted[:, :, 2], C1)
 
 
+def test_prediction_of_a_single_band(window3):
+    one_band = [image[:, :, np.newaxis] for image in (F0, C0, C1)]
+
+    predicted = starfm.prediction(*one_band)
+
+    assert predicted.shape == (3, 3, 1)
+    np.testing.assert_allclose(predicted[:, :, 0], predict_band(np.ones((3, 3))))
+
+
 # Edge mask
 
 
@@ -341,6 +350,19 @@ def test_edge_mask_is_empty_for_a_flat_image():
     flat = np.full((40, 40, 3), 7, dtype=np.uint8)
 
     assert not starfm.sobel_edge_detection(flat).any()
+
+
+@pytest.mark.parametrize("dtype", ["uint8", "uint16", "int16", "float32", "float64"])
+def test_edge_mask_takes_a_single_band_as_it_is(dtype):
+    three_bands = step_image(40, 40, start=20)
+    one_band = three_bands[:, :, :1].astype(dtype)
+    expected = starfm.sobel_edge_detection(three_bands)
+
+    # One band is already a grayscale image, with or without the third axis.
+    np.testing.assert_array_equal(starfm.sobel_edge_detection(one_band), expected)
+    np.testing.assert_array_equal(
+        starfm.sobel_edge_detection(one_band[:, :, 0]), expected
+    )
 
 
 def test_edge_mask_drops_a_weak_edge_next_to_a_strong_one():
